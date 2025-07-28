@@ -134,7 +134,7 @@ client.on("message", async (channel, tags, message, self) => {
           } catch (err) {
             console.error("❌ Failed to get heist result:", err);
           }
-        }, 300000); // 5 menit
+        }, 120000); // 2 menit
       }
     } catch (err) {
       console.error(`❌ Error fetch command ${command}:`, err);
@@ -145,18 +145,3 @@ client.on("message", async (channel, tags, message, self) => {
     }
   }
 });
-
-// ⏱ Auto-fetch hasil heist setiap 2 menit
-setInterval(async () => {
-  try {
-    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=${encodeURIComponent(username)}`;
-    const resultRes = await fetch(resultUrl);
-    const resultText = await resultRes.text();
-
-    if (resultText && resultText !== "NONE") {
-      client.say(`#${channel}`, resultText);
-    }
-  } catch (err) {
-    console.error("❌ Failed to get heist result:", err);
-  }
-}, 120000); // 2 menit
