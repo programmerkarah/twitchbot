@@ -31,6 +31,8 @@ const dynamicCommands = [
   "!mine",
   "!heist",
   "!join",
+  "!endheist",
+  "heistresult",
 ];
 
 // Konfigurasi bot
@@ -72,9 +74,8 @@ client.on("message", async (channel, tags, message, self) => {
   if (dynamicCommands.includes(command)) {
     try {
       const base = process.env.GAS_WEBHOOK;
-      const url = `${base}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(command.slice(1))}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
-
-      console.log(`[DEBUG] Fetching: ${url}`); // Tambahkan ini
+      const cmdName = command.slice(1);
+      const url = `${base}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
 
       const res = await fetch(url);
       const text = await res.text();
@@ -82,12 +83,22 @@ client.on("message", async (channel, tags, message, self) => {
       if (text) {
         client.say(channel, text);
       }
-    } catch (err) {
-      console.error(`❌ Error fetch command ${command}:`, err);
-      client.say(
-        channel,
-        `Maaf ${username}, terjadi kesalahan saat menjalankan perintah.`,
-      );
-    }
-  }
+
+      // ⏳ Jika command adalah heist, otomatis tunggu dan ambil hasilnya
+      if (cmdName === "heist") {
+        setTimeout(async () => {
+          try {
+            const resultUrl = `${base}?user=${encodeURIComponent(username)}&cmd=heistresult`;
+            const resultRes = await fetch(resultUrl);
+            const resultText = await resultRes.text();
+
+            if (resultText) {
+              client.say(channel, resultText);
+            }
+          } catch (err) {
+            console.error("❌ Gagal mengambil hasil heist:", err);
+          }
+        }, 300000); // tunggu 30 detik
+      }
+
 });
