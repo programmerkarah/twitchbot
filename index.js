@@ -1,8 +1,7 @@
 const tmi = require("tmi.js");
 const fetch = require("node-fetch");
-require("dotenv").config();
 const express = require("express");
-const fs = require("fs");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -14,10 +13,14 @@ app.listen(PORT, () => {
   console.log(`Bot is live at http://localhost:${PORT}`);
 });
 
+// Ambil info dari environment variable (Render Dashboard)
 const username = process.env.TWITCH_USERNAME;
-const oauth = process.env.TWITCH_OAUTH;
+let oauth = process.env.TWITCH_OAUTH; // akan diganti jika refresh sukses
 const channel = process.env.TWITCH_CHANNEL;
 const GAS_WEBHOOK = process.env.GAS_WEBHOOK;
+const clientId = process.env.TWITCH_CLIENT_ID;
+const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+const refreshToken = process.env.TWITCH_REFRESH_TOKEN;
 
 const dynamicCommands = [
   "!fish",
@@ -35,23 +38,24 @@ const dynamicCommands = [
   "!heistresult",
 ];
 
+// Fungsi refresh token
 async function refreshAccessToken() {
-  const url = "https://id.twitch.tv/oauth2/token";
-  const params = new URLSearchParams();
-  params.append("grant_type", "refresh_token");
-  params.append("refresh_token", process.env.TWITCH_REFRESH_TOKEN);
-  params.append("client_id", process.env.TWITCH_CLIENT_ID);
-  params.append("client_secret", process.env.TWITCH_CLIENT_SECRET);
-
   try {
-    const res = await fetch(url, { method: "POST", body: params });
+    const res = await fetch("https://id.twitch.tv/oauth2/token", {
+      method: "POST",
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
     const data = await res.json();
 
     if (data.access_token) {
       console.log("✅ Access token refreshed successfully");
-      process.env.TWITCH_ACCESS_TOKEN = data.access_token;
-      fs.writeFileSync(".env", updateEnvToken(data.access_token));
-      return data.access_token;
+      oauth = `oauth:${data.access_token}`;
     } else {
       console.error("❌ Failed to refresh token:", data);
     }
@@ -60,41 +64,47 @@ async function refreshAccessToken() {
   }
 }
 
-function updateEnvToken(newToken) {
-  const env = fs
-    .readFileSync(".env", "utf8")
-    .split("\n")
-    .map((line) => {
-      if (line.startsWith("TWITCH_ACCESS_TOKEN=")) {
-        return `TWITCH_ACCESS_TOKEN=${newToken}`;
-      }
-      return line;
-    });
-  return env.join("\n");
-}
-
+// Konfigurasi TMI bot
 const client = new tmi.Client({
-  identity: { username: username, password: oauth },
+  identity: {
+    username: username,
+    password: oauth,
+  },
   channels: [channel],
 });
 
 client
   .connect()
-  .then(() => console.log(`✅ Bot connected as ${username}`))
-  .catch(console.error);
+  .then(() => {
+    console.log(`✅ Bot connected as ${username}`);
+  })
+  .catch(async (err) => {
+    console.error("❌ Failed to connect:", err.message);
+    console.log("🔄 Trying to refresh access token...");
+    await refreshAccessToken();
+    client.opts.identity.password = oauth;
+    try {
+      await client.connect();
+      console.log(`✅ Reconnected as ${username} with refreshed token`);
+    } catch (e) {
+      console.error("❌ Failed to reconnect after token refresh:", e.message);
+    }
+  });
 
+// Respon command
 client.on("message", async (channel, tags, message, self) => {
   if (self) return;
+
   const args = message.trim().split(" ");
   const command = args[0].toLowerCase();
   const inputAmount = args[1] || "";
   const target = args[2] || "";
   const username = tags.username;
 
-  if (command === "!hello") {
+  if (command === "!halo") {
     client.say(
       channel,
-      `Hello ${username}! I'm ${process.env.TWITCH_USERNAME} personal bot👋`,
+      `Halo ${username}! Aku ${process.env.TWITCH_USERNAME} 👋`,
     );
     return;
   }
@@ -103,10 +113,13 @@ client.on("message", async (channel, tags, message, self) => {
     try {
       const cmdName = command.slice(1);
       const url = `${GAS_WEBHOOK}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
+
       const res = await fetch(url);
       const text = await res.text();
 
-      if (text) client.say(channel, text);
+      if (text) {
+        client.say(channel, text);
+      }
 
       if (cmdName === "heist") {
         setTimeout(async () => {
@@ -114,8 +127,10 @@ client.on("message", async (channel, tags, message, self) => {
             const resultUrl = `${GAS_WEBHOOK}?cmd=endheist&user=${encodeURIComponent(username)}`;
             const resultRes = await fetch(resultUrl);
             const resultText = await resultRes.text();
-            if (resultText && resultText !== "NONE")
+
+            if (resultText && resultText !== "NONE") {
               client.say(channel, resultText);
+            }
           } catch (err) {
             console.error("❌ Failed to get heist result:", err);
           }
@@ -131,14 +146,17 @@ client.on("message", async (channel, tags, message, self) => {
   }
 });
 
+// ⏱ Auto-fetch hasil heist setiap 2 menit
 setInterval(async () => {
   try {
-    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=systemcheck`;
+    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=bot`;
     const resultRes = await fetch(resultUrl);
     const resultText = await resultRes.text();
-    if (resultText && resultText !== "NONE")
+
+    if (resultText && resultText !== "NONE") {
       client.say(`#${channel}`, resultText);
+    }
   } catch (err) {
-    console.error("❌ Failed to auto-fetch heist result:", err);
+    console.error("❌ Failed to get heist result:", err);
   }
-}, 120000);
+}, 120000); // 2 menit
