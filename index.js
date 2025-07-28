@@ -1,5 +1,5 @@
 const tmi = require("tmi.js");
-const fetch = require("node-fetch"); // tambahkan ini di atas
+const fetch = require("node-fetch");
 require("dotenv").config();
 
 const express = require("express");
@@ -18,6 +18,7 @@ app.listen(PORT, () => {
 const username = process.env.TWITCH_USERNAME;
 const oauth = process.env.TWITCH_OAUTH;
 const channel = process.env.TWITCH_CHANNEL;
+const GAS_WEBHOOK = process.env.GAS_WEBHOOK;
 
 const dynamicCommands = [
   "!fish",
@@ -32,7 +33,6 @@ const dynamicCommands = [
   "!heist",
   "!join",
   "!endheist",
-  "heistresult",
 ];
 
 // Konfigurasi bot
@@ -56,12 +56,11 @@ client.on("message", async (channel, tags, message, self) => {
   if (self) return;
 
   const args = message.trim().split(" ");
-  const command = args[0].toLowerCase(); // misal: !gamble
-  const inputAmount = args[1] || ""; // misal: 100
-  const target = args[2] || ""; // misal: spikeunaa
+  const command = args[0].toLowerCase();
+  const inputAmount = args[1] || "";
+  const target = args[2] || "";
   const username = tags.username;
 
-  // Handle command lokal (contoh !halo)
   if (command === "!halo") {
     client.say(
       channel,
@@ -70,12 +69,10 @@ client.on("message", async (channel, tags, message, self) => {
     return;
   }
 
-  // Handle command dinamis via Google Apps Script
   if (dynamicCommands.includes(command)) {
     try {
-      const base = process.env.GAS_WEBHOOK;
-      const cmdName = command.slice(1);
-      const url = `${base}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
+      const cmdName = command.slice(1); // hapus tanda "!" di depan
+      const url = `${GAS_WEBHOOK}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
 
       const res = await fetch(url);
       const text = await res.text();
@@ -84,28 +81,43 @@ client.on("message", async (channel, tags, message, self) => {
         client.say(channel, text);
       }
 
-      // ⏳ Jika command adalah heist, otomatis tunggu dan ambil hasilnya
+      // ⏳ Auto-fetch hasil heist setelah 30 detik
       if (cmdName === "heist") {
         setTimeout(async () => {
           try {
-            const resultUrl = `${base}?user=${encodeURIComponent(username)}&cmd=heistresult`;
+            const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult`;
             const resultRes = await fetch(resultUrl);
             const resultText = await resultRes.text();
 
-            if (resultText) {
+            if (resultText && resultText !== "NONE") {
               client.say(channel, resultText);
             }
           } catch (err) {
-            console.error("❌ Gagal mengambil hasil heist:", err);
+            console.error("❌ Failed to get heist result:", err);
           }
-        }, 30000); // tunggu 30 detik
+        }, 300000); // 5 menit (300000 ms)
       }
     } catch (err) {
       console.error(`❌ Error fetch command ${command}:`, err);
       client.say(
         channel,
-        `Maaf ${username}, terjadi kesalahan saat menjalankan perintah.`,
+        `Sorry ${username}, there's a problem while running the command.`,
       );
     }
   }
 });
+
+// ⏱ Auto-fetch hasil heist setiap 2 menit
+setInterval(async () => {
+  try {
+    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult`;
+    const resultRes = await fetch(resultUrl);
+    const resultText = await resultRes.text();
+
+    if (resultText && resultText !== "NONE") {
+      client.say(`#${channel}`, resultText);
+    }
+  } catch (err) {
+    console.error("❌ Failed to get heist result:", err);
+  }
+}, 120000); // 2 menit
