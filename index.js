@@ -74,6 +74,8 @@ client.on("message", async (channel, tags, message, self) => {
       const base = process.env.GAS_WEBHOOK;
       const url = `${base}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(command.slice(1))}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
 
+      console.log(`[DEBUG] Fetching: ${url}`); // Tambahkan ini
+
       const res = await fetch(url);
       const text = await res.text();
 
@@ -87,6 +89,5 @@ client.on("message", async (channel, tags, message, self) => {
         `Maaf ${username}, terjadi kesalahan saat menjalankan perintah.`,
       );
     }
-    return;
   }
 });
