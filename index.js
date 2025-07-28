@@ -33,6 +33,7 @@ const dynamicCommands = [
   "!heist",
   "!join",
   "!endheist",
+  "!heistresult",
 ];
 
 // Konfigurasi bot
