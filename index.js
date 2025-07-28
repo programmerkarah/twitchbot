@@ -149,7 +149,7 @@ client.on("message", async (channel, tags, message, self) => {
 // ⏱ Auto-fetch hasil heist setiap 2 menit
 setInterval(async () => {
   try {
-    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=bot`;
+    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=${encodeURIComponent(username)}`;
     const resultRes = await fetch(resultUrl);
     const resultText = await resultRes.text();
 
