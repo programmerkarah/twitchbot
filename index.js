@@ -98,7 +98,14 @@ client.on("message", async (channel, tags, message, self) => {
           } catch (err) {
             console.error("❌ Gagal mengambil hasil heist:", err);
           }
-        }, 300000); // tunggu 30 detik
+        }, 30000); // tunggu 30 detik
       }
-
+    } catch (err) {
+      console.error(`❌ Error fetch command ${command}:`, err);
+      client.say(
+        channel,
+        `Maaf ${username}, terjadi kesalahan saat menjalankan perintah.`,
+      );
+    }
+  }
 });
