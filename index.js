@@ -82,11 +82,11 @@ client.on("message", async (channel, tags, message, self) => {
         client.say(channel, text);
       }
 
-      // ⏳ Auto-fetch hasil heist setelah 30 detik
+      // ⏳ Auto-fetch hasil heist setelah 5 menit
       if (cmdName === "heist") {
         setTimeout(async () => {
           try {
-            const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult`;
+            const resultUrl = `${GAS_WEBHOOK}?cmd=endheist&user=${encodeURIComponent(username)}`;
             const resultRes = await fetch(resultUrl);
             const resultText = await resultRes.text();
 
@@ -96,7 +96,8 @@ client.on("message", async (channel, tags, message, self) => {
           } catch (err) {
             console.error("❌ Failed to get heist result:", err);
           }
-        }, 300000); // 5 menit (300000 ms)
+        }, 5000); // 5 detik (5000 ms)
+        // }, 300000); // 5 menit (300000 ms)
       }
     } catch (err) {
       console.error(`❌ Error fetch command ${command}:`, err);
@@ -111,7 +112,7 @@ client.on("message", async (channel, tags, message, self) => {
 // ⏱ Auto-fetch hasil heist setiap 2 menit
 setInterval(async () => {
   try {
-    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult`;
+    const resultUrl = `${GAS_WEBHOOK}?cmd=heistresult&user=${encodeURIComponent(username)}`;
     const resultRes = await fetch(resultUrl);
     const resultText = await resultRes.text();
 
