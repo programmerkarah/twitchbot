@@ -13,14 +13,16 @@ app.listen(PORT, () => {
   console.log(`Bot is live at http://localhost:${PORT}`);
 });
 
-// Ambil info dari environment variable (Render Dashboard)
+// Ambil info dari environment variable
 const username = process.env.TWITCH_USERNAME;
-let oauth = process.env.TWITCH_OAUTH; // akan diganti jika refresh sukses
 const channel = process.env.TWITCH_CHANNEL;
 const GAS_WEBHOOK = process.env.GAS_WEBHOOK;
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 const refreshToken = process.env.TWITCH_REFRESH_TOKEN;
+
+let oauth = process.env.TWITCH_OAUTH; // akan diganti jika refresh sukses
+let client; // biar bisa di-recreate
 
 const dynamicCommands = [
   "!fish",
@@ -38,7 +40,7 @@ const dynamicCommands = [
   "!heistresult",
 ];
 
-// Fungsi refresh token
+// 🔄 Fungsi refresh token
 async function refreshAccessToken() {
   try {
     const res = await fetch("https://id.twitch.tv/oauth2/token", {
@@ -56,43 +58,50 @@ async function refreshAccessToken() {
     if (data.access_token) {
       console.log("✅ Access token refreshed successfully");
       oauth = `oauth:${data.access_token}`;
+      return oauth;
     } else {
       console.error("❌ Failed to refresh token:", data);
+      return null;
     }
   } catch (err) {
     console.error("❌ Error refreshing token:", err);
+    return null;
   }
 }
 
-// Konfigurasi TMI bot
-const client = new tmi.Client({
-  identity: {
-    username: username,
-    password: oauth,
-  },
-  channels: [channel],
-});
-
-client
-  .connect()
-  .then(() => {
-    console.log(`✅ Bot connected as ${username}`);
-  })
-  .catch(async (err) => {
-    console.error("❌ Failed to connect:", err.message);
-    console.log("🔄 Trying to refresh access token...");
-    await refreshAccessToken();
-    client.opts.identity.password = oauth;
-    try {
-      await client.connect();
-      console.log(`✅ Reconnected as ${username} with refreshed token`);
-    } catch (e) {
-      console.error("❌ Failed to reconnect after token refresh:", e.message);
-    }
+// 🔄 Fungsi untuk buat ulang client TMI
+async function connectBot() {
+  client = new tmi.Client({
+    identity: {
+      username: username,
+      password: oauth,
+    },
+    channels: [channel],
   });
 
-// Respon command
-client.on("message", async (channel, tags, message, self) => {
+  client.on("message", onMessageHandler);
+
+  try {
+    await client.connect();
+    console.log(`✅ Bot connected as ${username}`);
+  } catch (err) {
+    console.error("❌ Failed to connect:", err.message);
+
+    // Coba refresh token
+    console.log("🔄 Trying to refresh access token...");
+    const newOauth = await refreshAccessToken();
+    if (newOauth) {
+      oauth = newOauth;
+      console.log("🔄 Reconnecting with refreshed token...");
+      await connectBot();
+    } else {
+      console.error("❌ Cannot reconnect, refresh failed.");
+    }
+  }
+}
+
+// 🎯 Handler command
+async function onMessageHandler(channel, tags, message, self) {
   if (self) return;
 
   const args = message.trim().split(" ");
@@ -102,17 +111,18 @@ client.on("message", async (channel, tags, message, self) => {
   const username = tags.username;
 
   if (command === "!halo") {
-    client.say(
-      channel,
-      `Halo ${username}! Aku ${process.env.TWITCH_USERNAME} 👋`,
-    );
+    client.say(channel, `Halo ${username}! Aku ${process.env.TWITCH_USERNAME} 👋`);
     return;
   }
 
   if (dynamicCommands.includes(command)) {
     try {
       const cmdName = command.slice(1);
-      const url = `${GAS_WEBHOOK}?user=${encodeURIComponent(username)}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(inputAmount)}&target=${encodeURIComponent(target)}`;
+      const url = `${GAS_WEBHOOK}?user=${encodeURIComponent(
+        username
+      )}&cmd=${encodeURIComponent(cmdName)}&amount=${encodeURIComponent(
+        inputAmount
+      )}&target=${encodeURIComponent(target)}`;
 
       const res = await fetch(url);
       const text = await res.text();
@@ -138,10 +148,10 @@ client.on("message", async (channel, tags, message, self) => {
       }
     } catch (err) {
       console.error(`❌ Error fetch command ${command}:`, err);
-      client.say(
-        channel,
-        `Sorry ${username}, there's a problem while running the command.`,
-      );
+      client.say(channel, `Sorry ${username}, there's a problem while running the command.`);
     }
   }
-});
+}
+
+// 🚀 Start bot
+connectBot();
