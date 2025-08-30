@@ -38,6 +38,7 @@ const dynamicCommands = [
   "!join",
   "!endheist",
   "!heistresult",
+  "!help"
 ];
 
 // 🔄 Fungsi refresh token
